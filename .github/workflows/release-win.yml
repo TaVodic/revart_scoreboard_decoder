@@ -26,7 +26,7 @@ jobs:
 
       - name: Build exe
         run: |
-          pyinstaller --onefile --name revart_scoreboard_decoder --windowed revart_timing_decoder_gui.py 
+          pyinstaller --onefile --name revart_scoreboard_decoder_win --windowed revart_timing_decoder_gui.py 
 
       - name: Upload to Release
         uses: softprops/action-gh-release@v2
