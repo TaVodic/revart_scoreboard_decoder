@@ -42,14 +42,12 @@ jobs:
           set -eux
 
           docker run --rm \
-            -u "$(id -u):$(id -g)" \
             -v "$PWD":/src \
             -w /src \
             quay.io/pypa/manylinux2014_x86_64 \
             bash -lc '
               set -eux
 
-              # clean to avoid accidentally reusing anything built on ubuntu-22.04
               rm -rf build dist AppDir *.spec
 
               yum -y install tcl tk
@@ -76,24 +74,9 @@ jobs:
               EOF
 
               python3 - << "PY"
-              import struct, zlib
-              w = h = 64
-              sig = b"\x89PNG\r\n\x1a\n"
-              ihdr_data = struct.pack(">IIBBBBB", w, h, 8, 6, 0, 0, 0)
-              ihdr = b"IHDR" + ihdr_data
-              ihdr_crc = struct.pack(">I", zlib.crc32(ihdr) & 0xFFFFFFFF)
-              ihdr_chunk = struct.pack(">I", len(ihdr_data)) + ihdr + ihdr_crc
-              row = b"\x00" + (b"\x00\x00\x00\x00" * w)
-              raw = row * h
-              compressed = zlib.compress(raw, 9)
-              idat = b"IDAT" + compressed
-              idat_crc = struct.pack(">I", zlib.crc32(idat) & 0xFFFFFFFF)
-              idat_chunk = struct.pack(">I", len(compressed)) + idat + idat_crc
-              iend = b"IEND"
-              iend_crc = struct.pack(">I", zlib.crc32(iend) & 0xFFFFFFFF)
-              iend_chunk = struct.pack(">I", 0) + iend + iend_crc
-              with open("AppDir/revart_scoreboard_decoder.png", "wb") as f:
-                f.write(sig + ihdr_chunk + idat_chunk + iend_chunk)
+              import base64, pathlib
+              data = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO0p1mUAAAAASUVORK5CYII=")
+              pathlib.Path("AppDir/revart_scoreboard_decoder.png").write_bytes(data)
               PY
 
               chmod +x AppDir/usr/bin/revart_scoreboard_decoder
@@ -103,6 +86,9 @@ jobs:
                 | grep -o "GLIBC_[0-9]\+\.[0-9]\+" \
                 | sort -V \
                 | tail -n 10
+
+              # make outputs owned by the runner user (usually uid 1001)
+              chown -R 1001:121 /src || true
             '
 
       - name: Build AppImage (on runner)
