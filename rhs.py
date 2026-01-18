@@ -602,7 +602,7 @@ class SettingsWin(tk.Toplevel):
 
         self.series_var = tk.StringVar(value=cfg.series)
         self.series_ent = ttk.Entry(frm, textvariable=self.series_var, width=30)
-        row("Statisctics file name", self.series_ent, 1)        
+        row("Statistics file name", self.series_ent, 1)        
 
         self.hw_var = tk.StringVar(value=cfg.hist_wall)
         self.hw_ent = ttk.Entry(frm, textvariable=self.hw_var, width=30)
@@ -666,8 +666,8 @@ class SettingsWin(tk.Toplevel):
 class App(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title("REVART Timing Protocol - Decoder + Benchmark GUI")
-        self.geometry("1100x700")
+        self.title("REVART Timing Protocol")
+        self.geometry("860x700")
         self.configure(bg="#1E1B22")  # dark background
 
         self.cfg = Cfg()
@@ -716,6 +716,11 @@ class App(tk.Tk):
         self.src_status = tk.Label(right, text="Port: Disconnected", fg="#A0AEC0", bg="#1E1B22")
         self.src_status.grid(row=0, column=0, padx=6)
 
+        self.capture_status_var = tk.StringVar(value="Capture: Ready")
+        self.capture_status = tk.Label(right, textvariable=self.capture_status_var,
+                                       fg="#A0AEC0", bg="#1E1B22")
+        self.capture_status.grid(row=1, column=0, padx=6, pady=(4, 0), sticky="w")        
+
         since_box = tk.Frame(right, bg="#1E1B22")
         since_box.grid(row=0, column=1, padx=(6, 6))
 
@@ -731,24 +736,24 @@ class App(tk.Tk):
 
         # Port selector (serial source)
         self.port_var = tk.StringVar()
-        self.port_combo = ttk.Combobox(right, width=22, state="readonly", textvariable=self.port_var)
+        self.port_combo = ttk.Combobox(right, width=15, state="readonly", textvariable=self.port_var)
         self._refresh_ports()
         self.port_combo.grid(row=0, column=2, padx=6)
 
-        self.connect_btn = ttk.Button(right, text="CONNECT", command=self._connect)
+        self.connect_btn = ttk.Button(right, text="CONNECT", command=self._connect, width=11)
         self.connect_btn.grid(row=0, column=3, padx=6)
 
-        self.disconnect_btn = ttk.Button(right, text="DISCONNECT", command=self._disconnect, state="disabled")
+        self.disconnect_btn = ttk.Button(right, text="DISCONNECT", command=self._disconnect, state="disabled", width=13)
         self.disconnect_btn.grid(row=0, column=4, padx=6)
 
-        self.capture_btn = ttk.Button(right, text="CAPTURE", command=self._start_capture, state="disabled")
-        self.capture_btn.grid(row=0, column=5, padx=6)
+        self.settings_btn = ttk.Button(right, text="Settings", command=self._open_settings, width=11)
+        self.settings_btn.grid(row=0, column=5, padx=6)
 
-        self.stop_btn = ttk.Button(right, text="STOP", command=self._stop_capture, state="disabled")
-        self.stop_btn.grid(row=0, column=6, padx=6)
+        self.capture_btn = ttk.Button(right, text="CAPTURE", command=self._start_capture, state="disabled", width=11)
+        self.capture_btn.grid(row=1, column=3, padx=6, pady=(4, 0))
 
-        self.settings_btn = ttk.Button(right, text="Settings", command=self._open_settings)
-        self.settings_btn.grid(row=0, column=7, padx=6)
+        self.stop_btn = ttk.Button(right, text="STOP", command=self._stop_capture, state="disabled", width=11)
+        self.stop_btn.grid(row=1, column=4, padx=6, pady=(4, 0))
 
     def _build_center(self):
         center = tk.Frame(self, bg="#1E1B22")
@@ -767,13 +772,13 @@ class App(tk.Tk):
 
     def _build_sides(self):
         body = tk.Frame(self, bg="#1E1B22")
-        body.pack(side=tk.TOP, fill=tk.BOTH, expand=True, padx=12, pady=6)
+        body.pack(side=tk.TOP, fill=tk.X, padx=12, pady=6)
 
         self.left = self._team_panel(body, "Home team", "")
-        self.left.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 8))
+        self.left.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 8))
 
         self.right = self._team_panel(body, "Away team", "")
-        self.right.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(8, 0))
+        self.right.pack(side=tk.RIGHT, fill=tk.X, expand=True, padx=(8, 0))
 
     def _team_panel(self, parent, team_name, label_above):
         frame = tk.Frame(parent, bg="#2B2731", bd=0, highlightthickness=0)
@@ -787,13 +792,12 @@ class App(tk.Tk):
         role_lbl.pack(side=tk.RIGHT, padx=10)
 
         score_frame = tk.Frame(frame, bg="#2B2731")
-        score_frame.pack(side=tk.TOP, fill=tk.X, pady=(10, 4))
+        score_frame.pack(side=tk.TOP, fill=tk.X, pady=(10, 2))
 
         score_title = tk.Label(score_frame, text="SCORE", fg="#A0AEC0", bg="#2B2731")
         score_title.pack(side=tk.LEFT, padx=10)
         score_var = tk.StringVar(value="0")
-        score_label = tk.Label(score_frame, textvariable=score_var, fg="#FFFFFF", bg="#2B2731",
-                               font=("Segoe UI", 26, "bold"))
+        score_label = tk.Label(score_frame, textvariable=score_var, fg="#FFFFFF", bg="#2B2731", font=("Segoe UI", 26, "bold"))
         score_label.pack(side=tk.RIGHT, padx=10)
 
         pens_frame = tk.Frame(frame, bg="#2B2731")
@@ -822,22 +826,27 @@ class App(tk.Tk):
         bottom = tk.Frame(self, bg="#1E1B22")
         bottom.pack(side=tk.BOTTOM, fill=tk.BOTH, padx=12, pady=8)
 
-        nb = ttk.Notebook(bottom)
-        nb.pack(fill=tk.BOTH, expand=True)
+        # Last message section
+        last_frame = tk.Frame(bottom, bg="#1E1B22")
+        last_frame.pack(fill=tk.BOTH, expand=True)
 
-        # Last message tab
-        tab1 = tk.Frame(nb, bg="#1E1B22")
-        nb.add(tab1, text="Last message")
+        tk.Label(last_frame, text="Last message", fg="#A0AEC0", bg="#1E1B22",
+                 font=("Segoe UI", 10, "bold")).pack(anchor="w", pady=(0, 4))
 
-        self.last_msg = tk.Text(tab1, height=6, bg="#0F0D11", fg="#E2E8F0", insertbackground="#E2E8F0")
+        self.last_msg = tk.Text(last_frame, height=1, bg="#0F0D11", fg="#E2E8F0", insertbackground="#E2E8F0")
         self.last_msg.pack(fill=tk.BOTH, expand=True)
         self.last_msg.configure(state="disabled")
 
-        # Benchmark tab
-        tab2 = tk.Frame(nb, bg="#1E1B22")
-        nb.add(tab2, text="Benchmark")
+        #ttk.Separator(bottom, orient="horizontal").pack(fill=tk.X, pady=8)
 
-        self.bm_log = tk.Text(tab2, height=6, bg="#0F0D11", fg="#E2E8F0", insertbackground="#E2E8F0")
+        # Benchmark section
+        bm_frame = tk.Frame(bottom, bg="#1E1B22")
+        bm_frame.pack(fill=tk.BOTH, expand=True)
+
+        tk.Label(bm_frame, text="Benchmark", fg="#A0AEC0", bg="#1E1B22",
+                 font=("Segoe UI", 10, "bold")).pack(anchor="w", pady=(0, 4))
+
+        self.bm_log = tk.Text(bm_frame, height=6, bg="#0F0D11", fg="#E2E8F0", insertbackground="#E2E8F0")
         self.bm_log.pack(fill=tk.BOTH, expand=True)
         self.bm_log.configure(state="disabled")
 
@@ -909,6 +918,7 @@ class App(tk.Tk):
                     self.stop_btn.config(state="disabled")
                     self.settings_btn.config(state="disabled")
                     self.port_combo.config(state="disabled")
+                    self.capture_status_var.set("Capture: Ready")
                     self._connecting = False
                     self.reader.start()
 
@@ -927,6 +937,7 @@ class App(tk.Tk):
                     self.stop_btn.config(state="disabled")
                     self.settings_btn.config(state="normal")
                     self.port_combo.config(state="readonly")
+                    self.capture_status_var.set("Capture: Ready")
                     messagebox.showerror("Connect error", err_msg)
                 self.after(0, ui_fail)
 
@@ -956,6 +967,8 @@ class App(tk.Tk):
         self.stop_btn.config(state="disabled")
         self.settings_btn.config(state="normal")
         self.port_combo.config(state="readonly")
+        self.capture_status_var.set("Capture: Ready")
+        self.capture_status.config(fg="#A0AEC0")
 
     def _start_capture(self):
         if self.capture_active or getattr(self, "_starting_capture", False):
@@ -996,6 +1009,8 @@ class App(tk.Tk):
         self.capture_active = True
         self._cap_start_ts = time.perf_counter()
         self._last_hb_ts = self._cap_start_ts
+        self.capture_status_var.set("Capture: Runnig")
+        self.capture_status.config(fg="#3ED38A")
 
         if series_path:
             self._log_bm(f"Series CSV (temp): {series_path}.tmp")
@@ -1009,6 +1024,10 @@ class App(tk.Tk):
     def _stop_capture(self):
         if not self.capture_active:
             return
+
+        self.capture_status_var.set("Capture: Saving")
+        self.capture_status.config(fg="#D3973E")
+        self.update_idletasks()
 
         # Finalize series
         if self.series_writer is not None and self.bench is not None:
@@ -1060,6 +1079,8 @@ class App(tk.Tk):
         self.stop_btn.config(state="disabled")
         self.settings_btn.config(state="disabled" if self.connected else "normal")
         self.port_combo.config(state="disabled" if self.connected else "readonly")
+        self.capture_status_var.set("Capture: Ready")
+        self.capture_status.config(fg="#A0AEC0")
 
     def _on_close(self):
         try:
@@ -1080,10 +1101,15 @@ class App(tk.Tk):
                 if self.capture_active and self.cfg.heartbeat_s > 0 and self._last_hb_ts is not None and self.bench is not None:
                     now = time.perf_counter()
                     if (now - self._last_hb_ts) >= self.cfg.heartbeat_s:
-                        elapsed_h = 0.0
+                        elapsed_h = 0
+                        elapsed_m = 0
                         if self._cap_start_ts is not None:
-                            elapsed_h = (now - self._cap_start_ts) / 3600.0
-                        self._log_bm(f"[HB] {elapsed_h:.2f} h | frames={self.bench.total_frames} samples={len(self.bench.err_ms)}")
+                            elapsed_s = int(now - self._cap_start_ts)
+                            elapsed_h = elapsed_s // 3600
+                            elapsed_m = (elapsed_s % 3600) // 60
+                        self._log_bm(
+                            f"[HB] {elapsed_h:d}h {elapsed_m:02d}m | messages={self.bench.total_frames} samples={len(self.bench.err_ms)}"
+                        )
                         self._last_hb_ts = now
 
                 nf = normalize_frame(item.raw)
@@ -1151,7 +1177,8 @@ class App(tk.Tk):
         set_rows(self.right, rm.away_penalties)
 
         crc_status = "OK" if rm.crc_ok else "BAD"
-        self._log_last(f"{rm.raw}\nCRC={rm.crc_hex} ({crc_status})\n")
+        self._log_last(f"{rm.raw.strip("\n")}")
+        #    CRC={rm.crc_hex} ({crc_status})\n
 
 def main():
     app = App()
