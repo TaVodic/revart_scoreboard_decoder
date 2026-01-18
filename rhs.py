@@ -1238,7 +1238,7 @@ class App(tk.Tk):
         set_rows(self.right, rm.away_penalties)
 
         crc_status = "OK" if rm.crc_ok else "BAD"
-        self._log_last(f"{rm.raw.strip("\n")}")
+        self._log_last(f"{rm.raw}")
         #    CRC={rm.crc_hex} ({crc_status})\n
 
 def main():
