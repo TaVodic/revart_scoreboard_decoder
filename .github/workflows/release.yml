@@ -69,11 +69,9 @@ jobs:
           Terminal=false
           EOF
 
-          python3 - << "PY"
-          import base64, pathlib
-          data = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO0p1mUAAAAASUVORK5CYII=")
-          pathlib.Path("AppDir/revart_scoreboard_decoder.png").write_bytes(data)
-          PY
+          cat << "EOF" | base64 -d > AppDir/revart_scoreboard_decoder.png
+          iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC
+          EOF
 
           chmod +x AppDir/usr/bin/revart_scoreboard_decoder
 
