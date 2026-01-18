@@ -69,9 +69,33 @@ jobs:
           Terminal=false
           EOF
 
-          cat << "EOF" | base64 -d > AppDir/revart_scoreboard_decoder.png
-          iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC
-          EOF
+          python3 - << "PY"
+          import struct, zlib
+
+          w = h = 64
+          # PNG signature
+          sig = b"\x89PNG\r\n\x1a\n"
+          # IHDR chunk
+          ihdr_data = struct.pack(">IIBBBBB", w, h, 8, 6, 0, 0, 0)  # RGBA
+          ihdr = b"IHDR" + ihdr_data
+          ihdr_crc = struct.pack(">I", zlib.crc32(ihdr) & 0xFFFFFFFF)
+          ihdr_chunk = struct.pack(">I", len(ihdr_data)) + ihdr + ihdr_crc
+
+          # Raw image data: filter byte 0 + RGBA pixels (all transparent)
+          row = b"\x00" + (b"\x00\x00\x00\x00" * w)
+          raw = row * h
+          compressed = zlib.compress(raw, 9)
+          idat = b"IDAT" + compressed
+          idat_crc = struct.pack(">I", zlib.crc32(idat) & 0xFFFFFFFF)
+          idat_chunk = struct.pack(">I", len(compressed)) + idat + idat_crc
+
+          iend = b"IEND"
+          iend_crc = struct.pack(">I", zlib.crc32(iend) & 0xFFFFFFFF)
+          iend_chunk = struct.pack(">I", 0) + iend + iend_crc
+
+          with open("AppDir/revart_scoreboard_decoder.png", "wb") as f:
+            f.write(sig + ihdr_chunk + idat_chunk + iend_chunk)
+          PY
 
           chmod +x AppDir/usr/bin/revart_scoreboard_decoder
 
