@@ -36,68 +36,74 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Install system deps (Tk)
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y tcl tk
-
-      - name: Build (PyInstaller onedir -> AppDir)
+      - name: Build (manylinux2014, PyInstaller onedir -> AppDir) + GLIBC check
+        shell: bash
         run: |
           set -eux
 
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install pyinstaller
+          docker run --rm \
+            -u "$(id -u):$(id -g)" \
+            -v "$PWD":/src \
+            -w /src \
+            quay.io/pypa/manylinux2014_x86_64 \
+            bash -lc '
+              set -eux
 
-          pyinstaller --noconfirm --onedir --name revart_scoreboard_decoder rhs.py
+              # clean to avoid accidentally reusing anything built on ubuntu-22.04
+              rm -rf build dist AppDir *.spec
 
-          rm -rf AppDir
-          mkdir -p AppDir/usr/bin
-          cp -a dist/revart_scoreboard_decoder/. AppDir/usr/bin/
+              yum -y install tcl tk
+              yum clean all
 
-          cat > AppDir/revart_scoreboard_decoder.desktop << "EOF"
-          [Desktop Entry]
-          Type=Application
-          Name=Revart Scoreboard Decoder
-          Exec=revart_scoreboard_decoder
-          Icon=revart_scoreboard_decoder
-          Categories=Utility;
-          Terminal=false
-          EOF
+              /opt/python/cp311-cp311/bin/python -m pip install --upgrade pip
+              /opt/python/cp311-cp311/bin/pip install -r requirements.txt
+              /opt/python/cp311-cp311/bin/pip install pyinstaller
 
-          python3 - << "PY"
-          import struct, zlib
+              /opt/python/cp311-cp311/bin/pyinstaller --noconfirm --onedir --name revart_scoreboard_decoder rhs.py
 
-          w = h = 64
-          # PNG signature
-          sig = b"\x89PNG\r\n\x1a\n"
-          # IHDR chunk
-          ihdr_data = struct.pack(">IIBBBBB", w, h, 8, 6, 0, 0, 0)  # RGBA
-          ihdr = b"IHDR" + ihdr_data
-          ihdr_crc = struct.pack(">I", zlib.crc32(ihdr) & 0xFFFFFFFF)
-          ihdr_chunk = struct.pack(">I", len(ihdr_data)) + ihdr + ihdr_crc
+              rm -rf AppDir
+              mkdir -p AppDir/usr/bin
+              cp -a dist/revart_scoreboard_decoder/. AppDir/usr/bin/
 
-          # Raw image data: filter byte 0 + RGBA pixels (all transparent)
-          row = b"\x00" + (b"\x00\x00\x00\x00" * w)
-          raw = row * h
-          compressed = zlib.compress(raw, 9)
-          idat = b"IDAT" + compressed
-          idat_crc = struct.pack(">I", zlib.crc32(idat) & 0xFFFFFFFF)
-          idat_chunk = struct.pack(">I", len(compressed)) + idat + idat_crc
+              cat > AppDir/revart_scoreboard_decoder.desktop << "EOF"
+              [Desktop Entry]
+              Type=Application
+              Name=Revart Scoreboard Decoder
+              Exec=revart_scoreboard_decoder
+              Icon=revart_scoreboard_decoder
+              Categories=Utility;
+              Terminal=false
+              EOF
 
-          iend = b"IEND"
-          iend_crc = struct.pack(">I", zlib.crc32(iend) & 0xFFFFFFFF)
-          iend_chunk = struct.pack(">I", 0) + iend + iend_crc
+              python3 - << "PY"
+              import struct, zlib
+              w = h = 64
+              sig = b"\x89PNG\r\n\x1a\n"
+              ihdr_data = struct.pack(">IIBBBBB", w, h, 8, 6, 0, 0, 0)
+              ihdr = b"IHDR" + ihdr_data
+              ihdr_crc = struct.pack(">I", zlib.crc32(ihdr) & 0xFFFFFFFF)
+              ihdr_chunk = struct.pack(">I", len(ihdr_data)) + ihdr + ihdr_crc
+              row = b"\x00" + (b"\x00\x00\x00\x00" * w)
+              raw = row * h
+              compressed = zlib.compress(raw, 9)
+              idat = b"IDAT" + compressed
+              idat_crc = struct.pack(">I", zlib.crc32(idat) & 0xFFFFFFFF)
+              idat_chunk = struct.pack(">I", len(compressed)) + idat + idat_crc
+              iend = b"IEND"
+              iend_crc = struct.pack(">I", zlib.crc32(iend) & 0xFFFFFFFF)
+              iend_chunk = struct.pack(">I", 0) + iend + iend_crc
+              with open("AppDir/revart_scoreboard_decoder.png", "wb") as f:
+                f.write(sig + ihdr_chunk + idat_chunk + iend_chunk)
+              PY
 
-          with open("AppDir/revart_scoreboard_decoder.png", "wb") as f:
-            f.write(sig + ihdr_chunk + idat_chunk + iend_chunk)
-          PY
+              chmod +x AppDir/usr/bin/revart_scoreboard_decoder
 
-          chmod +x AppDir/usr/bin/revart_scoreboard_decoder
+              echo "=== GLIBC required by bundled libpython (should be <= 2.23 for Ubuntu 16.04) ==="
+              strings AppDir/usr/bin/_internal/libpython3.11.so.1.0 \
+                | grep -o "GLIBC_[0-9]\+\.[0-9]\+" \
+                | sort -V \
+                | tail -n 10
+            '
 
       - name: Build AppImage (on runner)
         run: |
@@ -106,7 +112,6 @@ jobs:
           curl -L -o linuxdeploy-plugin-appimage.AppImage https://github.com/linuxdeploy/linuxdeploy-plugin-appimage/releases/download/continuous/linuxdeploy-plugin-appimage-x86_64.AppImage
           chmod +x linuxdeploy.AppImage linuxdeploy-plugin-appimage.AppImage
 
-          # extract to avoid FUSE dependency
           ./linuxdeploy.AppImage --appimage-extract
           ./linuxdeploy-plugin-appimage.AppImage --appimage-extract
 
@@ -126,8 +131,6 @@ jobs:
         with:
           name: linux-appimage
           path: ./*.AppImage
-
-
 
   release:
     needs: [win-build, linux-build]
