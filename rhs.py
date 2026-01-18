@@ -330,8 +330,10 @@ class Benchmark:
     def __init__(self, ignore_bad_crc: bool = True, series_writer: Optional[SeriesWriter] = None):
         self.ignore_bad_crc = ignore_bad_crc
         self.prev: Optional[Parsed] = None
+        self.prev_any: Optional[Parsed] = None
 
         self.dt_wall_ms: List[float] = []
+        self.dt_wall_all_ms: List[float] = []
         self.dt_game_ms: List[float] = []
         self.err_ms: List[float] = []
 
@@ -353,6 +355,11 @@ class Benchmark:
             self.bad_crc += 1
             if self.ignore_bad_crc:
                 return
+
+        if self.prev_any is not None:
+            dt_wall_all = (p.recv_ts - self.prev_any.recv_ts) * 1000.0
+            self.dt_wall_all_ms.append(dt_wall_all)
+        self.prev_any = p
 
         # Ignore non-game-time modes
         if (p.total_hundredths is None):
@@ -382,27 +389,28 @@ class Benchmark:
         self.prev = p
 
     def stats(self) -> Optional[Dict[str, float]]:
-        n = len(self.err_ms)
-        if n == 0:
+        n_game = len(self.err_ms)
+        if n_game == 0:
             return None
 
         errors = self.err_ms
         abs_err = [abs(e) for e in errors]
 
-        mean_err = sum(errors) / n
-        rms = (sum(e*e for e in errors) / n) ** 0.5
-        p95_abs = sorted(abs_err)[max(0, int(0.95*n) - 1)]
+        mean_err = sum(errors) / n_game
+        rms = (sum(e * e for e in errors) / n_game) ** 0.5
+        p95_abs = sorted(abs_err)[max(0, int(0.95 * n_game) - 1)]
 
-        wall = self.dt_wall_ms
+        wall = self.dt_wall_all_ms
         game = self.dt_game_ms
 
-        avg_period = sum(wall) / n
-        wall_mean = sum(wall) / n
-        game_mean = sum(game) / n
-        wall_rms = (sum(x*x for x in wall) / n) ** 0.5
-        game_rms = (sum(x*x for x in game) / n) ** 0.5
-        wall_p95 = sorted(wall)[max(0, int(0.95*n) - 1)]
-        game_p95 = sorted(game)[max(0, int(0.95*n) - 1)]
+        wall_n = len(wall)
+        wall_mean = (sum(wall) / wall_n) if wall_n else 0.0
+        wall_rms = ((sum(x * x for x in wall) / wall_n) ** 0.5) if wall_n else 0.0
+        wall_p95 = sorted(wall)[max(0, int(0.95 * wall_n) - 1)] if wall_n else 0.0
+
+        game_mean = sum(game) / n_game
+        game_rms = (sum(x * x for x in game) / n_game) ** 0.5
+        game_p95 = sorted(game)[max(0, int(0.95 * n_game) - 1)]
 
         zeros_wall = sum(1 for x in wall if x == 0.0)
         zeros_game = sum(1 for x in game if x == 0.0)
@@ -410,10 +418,12 @@ class Benchmark:
 
         return {
             "total_frames": float(self.total_frames),
-            "used_samples": float(n),
+            "wall_samples": float(wall_n),
+            "game_samples": float(n_game),
+            "used_samples": float(n_game),
             "bad_crc": float(self.bad_crc),
             "skipped": float(self.skipped),
-            "avg_period_ms": float(avg_period),
+            "avg_period_ms": float(wall_mean),
             "mean_error_ms": float(mean_err),
             "rms_error_ms": float(rms),
             "p95_abs_error_ms": float(p95_abs),
@@ -431,11 +441,26 @@ class Benchmark:
     def stats_lines_for_file(self) -> List[str]:
         s = self.stats()
         if not s:
-            return ["No running clock samples collected."]
+            w = self.wall_stats()
+            if not w:
+                return ["No samples collected."]
+            return [
+                "REVART wall-clock statistics (no running samples)",
+                f"frames_total={int(w['total_frames'])}",
+                f"wall_samples={int(w['wall_samples'])}",
+                f"bad_crc={int(w['bad_crc'])} ignored_bad_crc={self.ignore_bad_crc}",
+                f"skipped_parse={int(w['skipped'])}",
+                f"wall_mean_ms={w['wall_mean']:.3f}",
+                f"wall_rms_ms={w['wall_rms']:.3f}",
+                f"wall_p95_ms={w['wall_p95']:.3f}",
+                f"zeros_wall={int(w['zeros_wall'])}",
+                f"generated_at_epoch={time.time():.3f}",
+            ]
         return [
             "REVART time integrity benchmark results",
             f"frames_total={int(s['total_frames'])}",
-            f"samples_used={int(s['used_samples'])}",
+            f"wall_samples={int(s['wall_samples'])}",
+            f"game_samples={int(s['game_samples'])}",
             f"bad_crc={int(s['bad_crc'])} ignored_bad_crc={self.ignore_bad_crc}",
             f"skipped_parse={int(s['skipped'])}",
             f"avg_wall_period_ms={s['avg_period_ms']:.3f}",
@@ -448,6 +473,28 @@ class Benchmark:
             f"generated_at_epoch={time.time():.3f}",
         ]
 
+    def wall_stats(self) -> Optional[Dict[str, float]]:
+        n = len(self.dt_wall_all_ms)
+        if n == 0:
+            return None
+
+        wall = self.dt_wall_all_ms
+        wall_mean = sum(wall) / n
+        wall_rms = (sum(x * x for x in wall) / n) ** 0.5
+        wall_p95 = sorted(wall)[max(0, int(0.95 * n) - 1)]
+        zeros_wall = sum(1 for x in wall if x == 0.0)
+
+        return {
+            "total_frames": float(self.total_frames),
+            "wall_samples": float(n),
+            "bad_crc": float(self.bad_crc),
+            "skipped": float(self.skipped),
+            "wall_mean": float(wall_mean),
+            "wall_rms": float(wall_rms),
+            "wall_p95": float(wall_p95),
+            "zeros_wall": float(zeros_wall),
+        }
+
     def _fixed_edges_0_to_max(self, values: List[float], bins: int = 100) -> List[float]:
         maxv = max(values) if values else 0.0
         if maxv <= 0.0:
@@ -456,7 +503,7 @@ class Benchmark:
         return [i * step for i in range(bins + 1)]
 
     def plot_wall_hist(self, bins: int = 100, save_path: Optional[str] = None):
-        wall = [x for x in self.dt_wall_ms if x >= 0.0]
+        wall = [x for x in self.dt_wall_all_ms if x >= 0.0]
         if not wall:
             raise RuntimeError("No wall dt samples to plot.")
         import matplotlib.pyplot as plt  # optional dependency
@@ -473,7 +520,6 @@ class Benchmark:
             plt.close()
         else:
             plt.show()
-
     def plot_game_hist(self, bins: int = 100, save_path: Optional[str] = None):
         game = [x for x in self.dt_game_ms if x >= 0.0]
         if not game:
@@ -1042,11 +1088,15 @@ class App(tk.Tk):
         # Histograms
         if self.bench is not None:
             try:
+                s = self.bench.stats()
+                w = None if s is not None else self.bench.wall_stats()
+
                 if self.cfg.hist_wall:
                     p = _as_out_path(self.cfg.hist_wall)
                     self.bench.plot_wall_hist(bins=100, save_path=p)
                     self._log_bm(f"Wall histogram written: {p}.png")
-                if self.cfg.hist_game:
+
+                if s is not None and self.cfg.hist_game:
                     p = _as_out_path(self.cfg.hist_game)
                     self.bench.plot_game_hist(bins=100, save_path=p)
                     self._log_bm(f"Game histogram written: {p}.png")
@@ -1056,14 +1106,25 @@ class App(tk.Tk):
                 self._log_bm(f"[ERR] Histogram error: {e}")
 
             # Summary
-            s = self.bench.stats()
             if s is None:
-                self._log_bm("No running clock samples collected.")
+                w = self.bench.wall_stats()
+                if w is None:
+                    self._log_bm("No samples collected.")
+                else:
+                    self._log_bm("")
+                    self._log_bm("Summary (wall only):")
+                    self._log_bm(f"Frames total: {int(w['total_frames'])}")
+                    self._log_bm(f"Wall samples: {int(w['wall_samples'])}")
+                    self._log_bm(f"CRC bad: {int(w['bad_crc'])}  Skipped parse: {int(w['skipped'])}")
+                    self._log_bm(f"Wall mean: {w['wall_mean']:.2f} ms")
+                    self._log_bm(f"Wall RMS: {w['wall_rms']:.2f} ms")
+                    self._log_bm(f"Wall 95th %: {w['wall_p95']:.2f} ms")
             else:
                 self._log_bm("")
                 self._log_bm("Summary:")
                 self._log_bm(f"Frames total: {int(s['total_frames'])}")
-                self._log_bm(f"Samples used: {int(s['used_samples'])}")
+                self._log_bm(f"Wall samples: {int(s['wall_samples'])}")
+                self._log_bm(f"Game samples: {int(s['game_samples'])}")
                 self._log_bm(f"CRC bad: {int(s['bad_crc'])}  Skipped parse: {int(s['skipped'])}")
                 self._log_bm(f"Avg wall period: {s['avg_period_ms']:.2f} ms")
                 self._log_bm(f"Mean error (game - wall): {s['mean_error_ms']:.2f} ms")
@@ -1108,7 +1169,7 @@ class App(tk.Tk):
                             elapsed_h = elapsed_s // 3600
                             elapsed_m = (elapsed_s % 3600) // 60
                         self._log_bm(
-                            f"[HB] {elapsed_h:d}h {elapsed_m:02d}m | messages={self.bench.total_frames} samples={len(self.bench.err_ms)}"
+                            f"[HB] {elapsed_h:d}h {elapsed_m:02d}m | messages={self.bench.total_frames} runnnig samples={len(self.bench.err_ms)}"
                         )
                         self._last_hb_ts = now
 
