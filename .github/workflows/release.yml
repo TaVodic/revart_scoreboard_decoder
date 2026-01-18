@@ -51,7 +51,7 @@ jobs:
               /opt/python/cp311-cp311/bin/pip install -r requirements.txt
               /opt/python/cp311-cp311/bin/pip install pyinstaller
 
-              /opt/python/cp311-cp311/bin/pyinstaller --noconfirm --onedir --name revart_scoreboard_decoder revart_timing_decoder_gui.py
+              /opt/python/cp311-cp311/bin/pyinstaller --noconfirm --onedir --name revart_scoreboard_decoder rhs.py
 
               rm -rf AppDir
               mkdir -p AppDir/usr/bin

@@ -8,7 +8,7 @@ Integrates:
   - Time integrity benchmark (dt_wall, dt_game, error), series CSV + optional histograms
 
 Run:
-  python rt_gui.py
+  python rhs.py
 
 License: MIT
 """
