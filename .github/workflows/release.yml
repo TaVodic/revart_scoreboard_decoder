@@ -35,133 +35,27 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
-
-      - name: Build (ubuntu16.04 container, shared Python) -> AppDir
-        shell: bash
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install deps
         run: |
-          set -eux
-
-          docker run --rm \
-            -v "$PWD":/src \
-            -w /src \
-            ubuntu:16.04 \
-            bash -lc '
-              set -eux
-
-              export DEBIAN_FRONTEND=noninteractive
-
-              apt-get update
-              apt-get install -y --no-install-recommends \
-                ca-certificates curl wget xz-utils \
-                build-essential pkg-config \
-                libssl-dev zlib1g-dev libbz2-dev libreadline-dev libsqlite3-dev \
-                libncurses5-dev libncursesw5-dev libffi-dev liblzma-dev \
-                tk-dev tcl-dev \
-                uuid-dev
-
-              # Build Python 3.11 with shared libpython
-              PYV=3.11.7
-              cd /tmp
-              wget -q https://www.python.org/ftp/python/${PYV}/Python-${PYV}.tgz
-              tar -xzf Python-${PYV}.tgz
-              cd Python-${PYV}
-              ./configure --prefix=/opt/py311 --enable-shared --with-ensurepip=install
-              make -j"$(nproc)"
-              make install
-
-              # Make sure the loader can find libpython at build/run time inside container
-              echo "/opt/py311/lib" > /etc/ld.so.conf.d/py311.conf
-              ldconfig
-
-              cd /src
-              rm -rf build dist AppDir *.spec
-
-              /opt/py311/bin/python3 -m pip install --upgrade pip
-              /opt/py311/bin/pip3 install -r requirements.txt
-              /opt/py311/bin/pip3 install pyinstaller
-
-              # Build onedir for AppImage
-              /opt/py311/bin/pyinstaller --noconfirm --onedir --name revart_scoreboard_decoder rhs.py
-
-              # Create AppDir
-              mkdir -p AppDir/usr/bin
-              cp -a dist/revart_scoreboard_decoder/. AppDir/usr/bin/
-
-              cat > AppDir/revart_scoreboard_decoder.desktop << "EOF"
-              [Desktop Entry]
-              Type=Application
-              Name=Revart Scoreboard Decoder
-              Exec=revart_scoreboard_decoder
-              Icon=revart_scoreboard_decoder
-              Categories=Utility;
-              Terminal=false
-              EOF
-
-              python3 - << "PY"
-              import base64, pathlib
-              data = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO0p1mUAAAAASUVORK5CYII=")
-              pathlib.Path("AppDir/revart_scoreboard_decoder.png").write_bytes(data)
-              PY
-
-              chmod +x AppDir/usr/bin/revart_scoreboard_decoder
-
-              echo "=== GLIBC required by bundled libpython (Ubuntu 16.04 should be OK) ==="
-              strings AppDir/usr/bin/_internal/libpython3.11.so.1.0 | grep -o "GLIBC_[0-9]\+\.[0-9]\+" | sort -V | tail -n 10
-            '
-
-      - name: Build AppImage (on runner)
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+      - name: Build linux
         run: |
-          set -eux
-          curl -L -o linuxdeploy.AppImage https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
-          curl -L -o linuxdeploy-plugin-appimage.AppImage https://github.com/linuxdeploy/linuxdeploy-plugin-appimage/releases/download/continuous/linuxdeploy-plugin-appimage-x86_64.AppImage
-          chmod +x linuxdeploy.AppImage linuxdeploy-plugin-appimage.AppImage
-
-          ./linuxdeploy.AppImage --appimage-extract
-          ./linuxdeploy-plugin-appimage.AppImage --appimage-extract
-
-          export PATH="$PWD/squashfs-root/usr/bin:$PATH"
-          export ARCH=x86_64
-
-          linuxdeploy \
-            --appdir AppDir \
-            --desktop-file AppDir/revart_scoreboard_decoder.desktop \
-            --icon-file AppDir/revart_scoreboard_decoder.png \
-            --output appimage
-
-          ls -la ./*.AppImage
-
+          pyinstaller --onefile --name revart_scoreboard_decoder_linux rhs.py
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: linux-appimage
-          path: ./*.AppImage
+          name: linux
+          path: dist/*
 
   release:
     needs: [win-build, linux-build]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Resolve tag for release
-        id: tag
-        shell: bash
-        run: |
-          set -euo pipefail
-          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
-            echo "tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
-          else
-            git fetch --tags --force
-            TAG="$(git describe --tags --abbrev=0)"
-            if [[ -z "${TAG}" ]]; then
-              echo "No tags found. Cannot publish a GitHub Release without a tag."
-              exit 1
-            fi
-            echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
-          fi
-          echo "Using tag: $(cat $GITHUB_OUTPUT | sed -n 's/^tag=//p')"
-
       - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
@@ -174,6 +68,4 @@ jobs:
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.tag.outputs.tag }}
           files: release_assets/**/*
-
