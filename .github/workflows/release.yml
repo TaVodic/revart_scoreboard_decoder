@@ -36,7 +36,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build (manylinux2014, PyInstaller onedir -> AppDir) + GLIBC check
+      - name: Build (ubuntu16.04 container, shared Python) -> AppDir
         shell: bash
         run: |
           set -eux
@@ -44,22 +44,46 @@ jobs:
           docker run --rm \
             -v "$PWD":/src \
             -w /src \
-            quay.io/pypa/manylinux2014_x86_64 \
+            ubuntu:16.04 \
             bash -lc '
               set -eux
 
+              export DEBIAN_FRONTEND=noninteractive
+
+              apt-get update
+              apt-get install -y --no-install-recommends \
+                ca-certificates curl wget xz-utils \
+                build-essential pkg-config \
+                libssl-dev zlib1g-dev libbz2-dev libreadline-dev libsqlite3-dev \
+                libncurses5-dev libncursesw5-dev libffi-dev liblzma-dev \
+                tk-dev tcl-dev \
+                uuid-dev
+
+              # Build Python 3.11 with shared libpython
+              PYV=3.11.7
+              cd /tmp
+              wget -q https://www.python.org/ftp/python/${PYV}/Python-${PYV}.tgz
+              tar -xzf Python-${PYV}.tgz
+              cd Python-${PYV}
+              ./configure --prefix=/opt/py311 --enable-shared --with-ensurepip=install
+              make -j"$(nproc)"
+              make install
+
+              # Make sure the loader can find libpython at build/run time inside container
+              echo "/opt/py311/lib" > /etc/ld.so.conf.d/py311.conf
+              ldconfig
+
+              cd /src
               rm -rf build dist AppDir *.spec
 
-              yum -y install tcl tk
-              yum clean all
+              /opt/py311/bin/python3 -m pip install --upgrade pip
+              /opt/py311/bin/pip3 install -r requirements.txt
+              /opt/py311/bin/pip3 install pyinstaller
 
-              /opt/python/cp311-cp311/bin/python -m pip install --upgrade pip
-              /opt/python/cp311-cp311/bin/pip install -r requirements.txt
-              /opt/python/cp311-cp311/bin/pip install pyinstaller
+              # Build onedir for AppImage
+              /opt/py311/bin/pyinstaller --noconfirm --onedir --name revart_scoreboard_decoder rhs.py
 
-              /opt/python/cp311-cp311/bin/pyinstaller --noconfirm --onedir --name revart_scoreboard_decoder rhs.py
-
-              rm -rf AppDir
+              # Create AppDir
               mkdir -p AppDir/usr/bin
               cp -a dist/revart_scoreboard_decoder/. AppDir/usr/bin/
 
@@ -81,14 +105,8 @@ jobs:
 
               chmod +x AppDir/usr/bin/revart_scoreboard_decoder
 
-              echo "=== GLIBC required by bundled libpython (should be <= 2.23 for Ubuntu 16.04) ==="
-              strings AppDir/usr/bin/_internal/libpython3.11.so.1.0 \
-                | grep -o "GLIBC_[0-9]\+\.[0-9]\+" \
-                | sort -V \
-                | tail -n 10
-
-              # make outputs owned by the runner user (usually uid 1001)
-              chown -R 1001:121 /src || true
+              echo "=== GLIBC required by bundled libpython (Ubuntu 16.04 should be OK) ==="
+              strings AppDir/usr/bin/_internal/libpython3.11.so.1.0 | grep -o "GLIBC_[0-9]\+\.[0-9]\+" | sort -V | tail -n 10
             '
 
       - name: Build AppImage (on runner)
