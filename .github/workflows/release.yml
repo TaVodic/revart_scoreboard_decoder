@@ -56,6 +56,28 @@ jobs:
     needs: [win-build, linux-build]
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve tag for release
+        id: tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            echo "tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          else
+            git fetch --tags --force
+            TAG="$(git describe --tags --abbrev=0)"
+            if [[ -z "${TAG}" ]]; then
+              echo "No tags found. Cannot publish a GitHub Release without a tag."
+              exit 1
+            fi
+            echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          fi
+          echo "Using tag: $(cat $GITHUB_OUTPUT | sed -n 's/^tag=//p')"
+
       - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
@@ -68,4 +90,5 @@ jobs:
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ steps.tag.outputs.tag }}
           files: release_assets/**/*
