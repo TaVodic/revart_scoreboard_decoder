@@ -24,7 +24,7 @@ jobs:
           pip install pyinstaller
       - name: Build exe
         run: |
-          pyinstaller --onefile --name revart_scoreboard_decoder_win --windowed rhs.py
+          pyinstaller --onefile --name omega_protocol_decoder_win --windowed rhs_omega.py
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
@@ -45,7 +45,7 @@ jobs:
           pip install pyinstaller
       - name: Build linux
         run: |
-          pyinstaller --onefile --name revart_scoreboard_decoder_linux rhs.py
+          pyinstaller --onefile --name omega_protocol_decoder_linux rhs_omega.py
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
