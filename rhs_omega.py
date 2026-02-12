@@ -95,7 +95,6 @@ class ProtocolParser:
 
     def _parse_message(self, body: bytes) -> dict[str, Any]:
         msg_type = self._message_type(body)
-        info = body[2:] if msg_type.startswith("F") else body[2:]
         if msg_type.startswith("F"):
             info = body[3:-1]
         else:
@@ -323,6 +322,7 @@ class App:
         content.add(lower, weight=2)
 
         self._build_score_panel(upper)
+        self._build_olympic_panel(upper)
         self._build_players_panel(upper)
         self._build_log_panel(lower)
 
@@ -353,13 +353,15 @@ class App:
         highlighted_keys = {"clock", "home_score", "away_score", "period", "start_stop", "time"}
 
         for row, (k, label) in enumerate(keys):
-            ttk.Label(frame, text=label).grid(row=row, column=0, sticky="w", padx=(0, 10), pady=1)
+            
             v = tk.StringVar(value="-")
             self.vars[k] = v
             if k in highlighted_keys:
                 tk.Label(frame, textvariable=v, bg="#FFFF00").grid(row=row, column=1, sticky="w", pady=1)
+                ttk.Label(frame, text=label, background="#FFFF00").grid(row=row, column=0, sticky="w", padx=(0, 10), pady=1)
             else:
                 ttk.Label(frame, textvariable=v).grid(row=row, column=1, sticky="w", pady=1)
+                ttk.Label(frame, text=label).grid(row=row, column=0, sticky="w", padx=(0, 10), pady=1)
 
         self.penalties_var = tk.StringVar(value="-")
         ttk.Label(frame, text="Penalty timers (C)").grid(row=len(keys), column=0, sticky="w", padx=(0, 10), pady=(8, 1))
@@ -367,9 +369,39 @@ class App:
             row=len(keys), column=1, sticky="w", pady=(8, 1)
         )
 
+    def _build_olympic_panel(self, parent: ttk.Panedwindow) -> None:
+        frame = ttk.LabelFrame(parent, text="Penalty (O)", padding=8)
+        parent.add(frame, weight=1)
+
+        self.penalties_olympic_info_var = tk.StringVar(value="-")
+        ttk.Label(frame, text="Home penalty (O)", background="#FFFF00").grid(row=0, column=0, sticky="w", pady=(0, 2))
+        self.olympic_home_tree = ttk.Treeview(frame, columns=("player", "timer"), show="headings", height=3)
+        self.olympic_home_tree.heading("player", text="Player")
+        self.olympic_home_tree.heading("timer", text="Timer")
+        self.olympic_home_tree.column("player", width=90, anchor=tk.CENTER)
+        self.olympic_home_tree.column("timer", width=110, anchor=tk.CENTER)
+        for i in range(1, 4):
+            self.olympic_home_tree.insert("", tk.END, iid=f"OH{i}", values=("", ""))
+        self.olympic_home_tree.grid(row=1, column=0, sticky="nsew")
+
+        ttk.Label(frame, text="Away penalty (O)", background="#FFFF00").grid(row=2, column=0, sticky="w", pady=(8, 2))
+        self.olympic_away_tree = ttk.Treeview(frame, columns=("player", "timer"), show="headings", height=3)
+        self.olympic_away_tree.heading("player", text="Player")
+        self.olympic_away_tree.heading("timer", text="Timer")
+        self.olympic_away_tree.column("player", width=90, anchor=tk.CENTER)
+        self.olympic_away_tree.column("timer", width=110, anchor=tk.CENTER)
+        for i in range(1, 4):
+            self.olympic_away_tree.insert("", tk.END, iid=f"OA{i}", values=("", ""))
+        self.olympic_away_tree.grid(row=3, column=0, sticky="nsew")
+
+        ttk.Label(frame, textvariable=self.penalties_olympic_info_var).grid(row=4, column=0, sticky="w", pady=(6, 0))
+        frame.columnconfigure(0, weight=1)
+        frame.rowconfigure(1, weight=1)
+        frame.rowconfigure(3, weight=1)
+
     def _build_players_panel(self, parent: ttk.Panedwindow) -> None:
         wrapper = ttk.LabelFrame(parent, text="Players (F)", padding=8)
-        parent.add(wrapper, weight=2)
+        parent.add(wrapper, weight=1)
 
         cols = ("idx", "shirt", "on_field", "faults", "points")
         self.home_tree = ttk.Treeview(wrapper, columns=cols, show="headings", height=16)
@@ -379,7 +411,6 @@ class App:
             for c, h in zip(cols, ("Player#", "Shirt (F1/F2)", "On field (F1/F2)", "Faults (F1/F2)", "Points (F3/F4)")):
                 tree.heading(c, text=h)
                 tree.column(c, width=70, anchor=tk.CENTER)
-            tree.tag_configure("top3", background="#FFFF00")
             tree.column("on_field", width=80)
             tree.insert("", tk.END, values=(f"{team} team", "", "", "", ""))
             for i in range(1, 17):
@@ -490,7 +521,17 @@ class App:
             timers = parsed.get("timers", [])
             p_local = parsed.get("penalty_local")
             p_away = parsed.get("penalty_away")
-            self.penalties_var.set(f"Olympic: {timers} | 10-min local={p_local} away={p_away}")
+            for i in range(1, 4):
+                timer_data = timers[i - 1] if i - 1 < len(timers) else {}
+                player = timer_data.get("player", "")
+                timer = timer_data.get("time", "")
+                self.olympic_home_tree.item(f"OH{i}", values=(player, timer))
+            for i in range(1, 4):
+                timer_data = timers[i + 2] if i + 2 < len(timers) else {}
+                player = timer_data.get("player", "")
+                timer = timer_data.get("time", "")
+                self.olympic_away_tree.item(f"OA{i}", values=(player, timer))
+            self.penalties_olympic_info_var.set(f"10-min local={p_local} away={p_away}")
 
     def apply_team_message(self, roster: dict[int, dict[str, Any]], parsed: dict[str, Any]) -> None:
         players = parsed.get("players", [])
